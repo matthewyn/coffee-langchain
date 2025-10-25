@@ -11,4 +11,5 @@ dependencies = [
     "langchain-google-genai>=3.0.0",
     "python-dotenv>=1.1.1",
     "streamlit>=1.50.0",
+    "streamlit-js-eval>=0.1.7",
 ]

@@ -233,6 +233,7 @@ dependencies = [
     { name = "langchain-google-genai" },
     { name = "python-dotenv" },
     { name = "streamlit" },
+    { name = "streamlit-js-eval" },
 ]
 
 [package.metadata]
@@ -243,6 +244,7 @@ requires-dist = [
     { name = "langchain-google-genai", specifier = ">=3.0.0" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "streamlit", specifier = ">=1.50.0" },
+    { name = "streamlit-js-eval", specifier = ">=0.1.7" },
 ]
 
 [[package]]
@@ -1693,6 +1695,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d6/f6/f7d3a0146577c1918439d3163707040f7111a7d2e7e2c73fa7adeb169c06/streamlit-1.50.0.tar.gz", hash = "sha256:87221d568aac585274a05ef18a378b03df332b93e08103fffcf3cd84d852af46", size = 9664808, upload-time = "2025-09-23T19:24:00.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/38/991bbf9fa3ed3d9c8e69265fc449bdaade8131c7f0f750dbd388c3c477dc/streamlit-1.50.0-py3-none-any.whl", hash = "sha256:9403b8f94c0a89f80cf679c2fcc803d9a6951e0fba542e7611995de3f67b4bb3", size = 10068477, upload-time = "2025-09-23T19:23:57.245Z" },
+]
+
+[[package]]
+name = "streamlit-js-eval"
+version = "0.1.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/76/e4/bde7a73ed1967e0713e4e361c9b1a3ee87e66399c39422be13498467dd72/streamlit_js_eval-0.1.7.tar.gz", hash = "sha256:af80eff45e2f23a676588578aff7d2790080360528c656f4a4476c1484574c97", size = 7049, upload-time = "2024-03-06T11:37:16.135Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/98/15/e8abb57a25eb11ee5e645ef123ee7c38f5fecbbea5268e92674f1b65ba61/streamlit_js_eval-0.1.7-py3-none-any.whl", hash = "sha256:c99c23d1c6e2a27fd45794262e2ac07befaef9603a86e4e325a9e980cad8c78d", size = 7912, upload-time = "2024-03-06T11:37:15.248Z" },
 ]
 
 [[package]]
