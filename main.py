@@ -82,7 +82,7 @@ if "routing_template" not in st.session_state:
     st.session_state["routing_template"] = PromptTemplate(
         template="""
         You are a routing assistant for CoffeeGPT. Your job is to decide whether the user's question
-        requires calling a tool, and if so, which FINAL tool is appropriate for answering the user question.
+        requires calling a tool, and if so, which FINAL tool is appropriate for answering the user question. If the question is NOT related to coffee, just response with "not_related".
 
         You DO NOT answer the question directly. You only output the routing decision.
 
@@ -168,45 +168,57 @@ with st.container(horizontal_alignment="center", gap="medium"):
                 "chat_history": chat_history_text,
                 "input": prompt
             }).content
-            final_tool = routing_chain.invoke({"question": rephrased_question})
-            prompt_template = PromptTemplate(template=template).partial(lat=st.session_state.get("user_lat", 0.0), lng=st.session_state.get("user_lng", 0.0))
+            routing_decision = routing_chain.invoke({"question": rephrased_question})
 
-            if final_tool.final_tool_to_use == "find_places_nearby":
-                response_format = PlacesNearby
-            elif final_tool.final_tool_to_use == "TavilySearch":
-                response_format = SearchResult
+            if routing_decision.final_tool_to_use == "not_related":
+                st.session_state["ai_responses"].append([{"info": "Sorry, I'm not an expert at that field.", "photo_url": None}])
+                st.session_state["new_ai_responses"].append([{"info": "Sorry, I'm not an expert at that field.", "photo_url": None}])
+                st.session_state["chat_history"].append(AIMessage(content="Sorry, I'm not an expert at that field."))
             else:
-                response_format = None
+                prompt_template = PromptTemplate(template=template).partial(lat=st.session_state.get("user_lat", 0.0), lng=st.session_state.get("user_lng", 0.0))
 
-            if response_format:
-                agent = create_agent(model=llm, tools=tools, system_prompt=prompt_template.format(), response_format=response_format)
-                res = agent.invoke({"messages": rephrased_question})
-                data = res["structured_response"]
-                if response_format == PlacesNearby:
-                    # Prepare a list of dicts for each shop with info and image
-                    shops = []
-                    for i in range(len(data.names)):
-                        info = (
-                            f"**{i+1}. {data.names[i]}**\n"
-                            f"   - Address: {data.addresses[i]}\n"
-                            f"   - Rating: {data.ratings[i]}\n"
-                            f"   - Google Maps: [Navigate to Place]({data.google_map_links[i]})"
-                        )
-                        photo_url = cached_photo(data.photos[i]) if i < len(data.photos) else None
-                        shops.append({"info": info, "photo_url": photo_url})
-                    st.session_state["ai_responses"].append(shops)
-                    st.session_state["new_ai_responses"].append(shops)
-                    st.session_state["chat_history"].append(AIMessage(content=shops))
-                elif response_format == SearchResult:
-                    output = ". ".join(f"{item.text.rstrip('.!? ')} {item.source}" for item in data.results)
-                    st.session_state["ai_responses"].append([{"info": output, "photo_url": None}])
-                    st.session_state["new_ai_responses"].append([{"info": output, "photo_url": None}])
-                    st.session_state["chat_history"].append(AIMessage(content=output))
-            else:
-                res = llm.invoke(rephrased_question)
-                st.session_state["ai_responses"].append([{"info": res.text, "photo_url": None}])
-                st.session_state["new_ai_responses"].append([{"info": res.text, "photo_url": None}])
-                st.session_state["chat_history"].append(AIMessage(content=res.text))
+                if routing_decision.final_tool_to_use == "find_places_nearby":
+                    response_format = PlacesNearby
+                elif routing_decision.final_tool_to_use == "TavilySearch":
+                    response_format = SearchResult
+                else:
+                    response_format = None
+
+                if response_format:
+                    agent = create_agent(model=llm, tools=tools, system_prompt=prompt_template.format(), response_format=response_format)
+                    res = agent.invoke({"messages": rephrased_question})
+                    data = res["structured_response"]
+                    if response_format == PlacesNearby:
+                        # Prepare a list of dicts for each shop with info and image
+                        shops = []
+                        for i in range(len(data.names)):
+                            info = (
+                                f"**{i+1}. {data.names[i]}**\n"
+                                f"   - Address: {data.addresses[i]}\n"
+                                f"   - Rating: {data.ratings[i]}\n"
+                                f"   - Google Maps: [Navigate to Place]({data.google_map_links[i]})"
+                            )
+                            photo_url = cached_photo(data.photos[i]) if i < len(data.photos) else None
+                            shops.append({"info": info, "photo_url": photo_url})
+                        st.session_state["ai_responses"].append(shops)
+                        st.session_state["new_ai_responses"].append(shops)
+                        st.session_state["chat_history"].append(AIMessage(content=shops))
+                    elif response_format == SearchResult:
+                        # Render each result as a separate markdown block for consistency
+                        results = []
+                        for item in data.results:
+                            text = item.text.strip()
+                            source = item.source.strip()
+                            info = f"{text}  {source}"
+                            results.append({"info": info, "photo_url": None})
+                        st.session_state["ai_responses"].append(results)
+                        st.session_state["new_ai_responses"].append(results)
+                        st.session_state["chat_history"].append(AIMessage(content=results))
+                else:
+                    res = llm.invoke(rephrased_question)
+                    st.session_state["ai_responses"].append([{"info": res.text, "photo_url": None}])
+                    st.session_state["new_ai_responses"].append([{"info": res.text, "photo_url": None}])
+                    st.session_state["chat_history"].append(AIMessage(content=res.text))
 
     if st.session_state["user_prompts"]:
         with st.container(gap="small"):
@@ -217,12 +229,19 @@ with st.container(horizontal_alignment="center", gap="medium"):
                 # ai is now a list of dicts with info and photo_url
                 def render_shops(shops, stream=False):
                     for shop in shops:
-                        if stream:
-                            message.write_stream(stream_data(shop["info"]))
+                        # For TavilySearch, always use st.markdown for info
+                        if shop["photo_url"] is None:
+                            if stream:
+                                message.write_stream(stream_data(shop["info"]))
+                            else:
+                                message.markdown(shop["info"])
                         else:
-                            message.write(shop["info"])
-                        if shop["photo_url"] and shop["photo_url"] != "NOT_FOUND":
-                            message.image(shop["photo_url"], caption="The photo of the coffee shop.")
+                            if stream:
+                                message.write_stream(stream_data(shop["info"]))
+                            else:
+                                message.write(shop["info"])
+                            if shop["photo_url"] and shop["photo_url"] != "NOT_FOUND":
+                                message.image(shop["photo_url"], caption="The photo of the coffee shop.")
 
                 if i == len(st.session_state["user_prompts"]) - 1 and st.session_state["new_ai_responses"]:
                     render_shops(st.session_state["new_ai_responses"][-1], stream=True)
