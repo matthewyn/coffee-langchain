@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class ToolsToUse(BaseModel):
     """Schema for AI model to decide the correct final tool to use for answering the user question."""
-    final_tool_to_use: Literal["find_places_nearby", "geocode_place", "TavilySearch", "no_tool", "not_related"] = Field(description="The final apropriate tool to use for answering the user question.")
+    final_tool_to_use: Literal["find_places_by_text", "geocode_place", "get_place_detail", "TavilySearch", "no_tool", "not_related"] = Field(description="The final apropriate tool to use for answering the user question.")
 
 class PlacesNearby(BaseModel):
     """Schema required to format the AI responses when find_places_nearby tool is called."""

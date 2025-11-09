@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import streamlit as st
 from schema import ToolsToUse, PlacesNearby, SearchResult
 from helper import stream_data, cached_photo
-from tools import find_places_nearby, geocode_place
+from tools import geocode_place, get_place_detail, find_places_by_text
 from streamlit_js_eval import get_geolocation
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import HumanMessage, AIMessage
@@ -26,7 +26,7 @@ if "user_lat" not in st.session_state or "user_lng" not in st.session_state:
     else:
         st.warning("⚠️ Unable to fetch location automatically. Please allow location access or enter manually.")
 
-tools = [find_places_nearby, geocode_place, TavilySearch()]
+tools = [find_places_by_text, geocode_place, TavilySearch(), get_place_detail]
 
 # Store LLM and prompt templates in session state for single initialization
 if "llm" not in st.session_state:
@@ -38,12 +38,18 @@ if "template" not in st.session_state:
     ☕ Topics include coffee beans, brewing methods, espresso, roasting, flavors, origins, caffeine, coffee machines, and coffee shops or cafes.
 
     You have access to special tools:
-    - `find_places_nearby(lat, lng, query, radius)` → to find nearby coffee shops by coordinates.
-    - `geocode_place(place_name)` → to find coordinates for a named place (e.g., "Petronas Twin Towers").
+    - `find_places_by_text(lat, lng, query, radius)` → to find coffee shops or cafes **based on a text query** (e.g., "third wave coffee", "cozy cafe with wifi", "specialty espresso", "cafe in Sydney, Australia").
+    - `geocode_place(place_name)` → Convert a place name such as "Starbucks Plaza Indonesia" or "Tokyo Tower" into coordinates. This tool can also provide a placeId that may be used as the argument for `get_place_detail`.
+    - `get_place_detail(placeId)` → Retrieve detailed information about a specific coffee shop by place ID.
     - `TavilySearch(query)` → search the **latest**, **trending**, or **recent** information about coffee, such as news, new brewing methods, emerging coffee trends, or current market data.
 
     🧠 Tool usage rules:
-    - If the user asks about **places**, **locations**, or **nearby coffee shops**, use `find_places_nearby` or `geocode_place`.
+    - If the user asks to **search for coffee shops or cafes by description or name** (e.g., "Japanese-style cafe", "specialty coffee"), use `find_places_by_text`.
+    - If the user’s query mentions a **specific place name** (e.g., "near Shibuya Station", "around Central Park", "in Jakarta Selatan"):
+        1. First call `geocode_place(place_name)` to get coordinates.
+        2. Then call `find_places_by_text(lat, lng, query)` using those coordinates.
+    - If the user asks for cafes **near me** or **nearby** without specifying a place, use `find_places_by_text` with the user’s **current location**.
+    - If the user asks for details about a specific cafe (address, hours, rating, phone, etc.), use `get_place_detail`.
     - If the user asks about the **latest**, **newest**, **trending**, or **current** news, methods, innovations, or discoveries related to coffee — **use `TavilySearch`**.
     - Do **not** fabricate data; always use a tool call when real-world information is requested.
     - If the question is NOT related to coffee, say exactly: "Sorry, I'm not an expert at that field."
@@ -87,14 +93,28 @@ if "routing_template" not in st.session_state:
         You DO NOT answer the question directly. You only output the routing decision.
 
         Available Tools:
-        1. find_places_nearby(lat, lng, query, radius)
-        - Use when the user asks about cafes, coffee shops, "near me", "nearby", specific locations, or directions.
+        1. find_places_by_text(query, lat, lng, radius)
+        - Use when the user is searching for coffee shops or cafes based on:
+          - A name (e.g., "Starbucks", "Kopi Kenangan")
+          - A description (e.g., "cozy cafe with wifi", "specialty coffee roasters")
+          - A general search request like "cafe recommendations"
+          - A location mentioned by name (e.g., "near Shibuya Station", "in Jakarta Selatan")
+          - A request like "near me" or "nearby"
 
         2. geocode_place(place_name)
-        - Use when the user provides a named location (e.g., "Jakarta", "Tokyo", "Starbucks Plaza Indonesia")
-            and you need to convert it into coordinates to later use with find_places_nearby.
+        - Use only when you need to convert a named location into coordinates in order to use with `find_places_by_text`.
 
-        3. TavilySearch(query)
+        3. get_place_detail(placeId)
+        -  Use when the user asks for details about a specific cafe or coffee shop, such as:
+           - Address
+           - Opening hours
+           - Phone number
+           - Seating
+           - Rating
+           - Menu
+           - More detailed information about a place already identified.
+
+        4. TavilySearch(query)
         - Use when the user asks about the **latest**, **recent**, **trend**, **news**, **updates**,
             or **current market data** related to coffee.
 
@@ -177,48 +197,47 @@ with st.container(horizontal_alignment="center", gap="medium"):
             else:
                 prompt_template = PromptTemplate(template=template).partial(lat=st.session_state.get("user_lat", 0.0), lng=st.session_state.get("user_lng", 0.0))
 
-                if routing_decision.final_tool_to_use == "find_places_nearby":
+                if routing_decision.final_tool_to_use == "find_places_by_text":
                     response_format = PlacesNearby
                 elif routing_decision.final_tool_to_use == "TavilySearch":
                     response_format = SearchResult
                 else:
                     response_format = None
 
-                if response_format:
-                    agent = create_agent(model=llm, tools=tools, system_prompt=prompt_template.format(), response_format=response_format)
-                    res = agent.invoke({"messages": rephrased_question})
+                agent = create_agent(model=llm, tools=tools, system_prompt=prompt_template.format(), response_format=response_format)
+                res = agent.invoke({"messages": rephrased_question})
+                if response_format == PlacesNearby:
+                    # Prepare a list of dicts for each shop with info and image
                     data = res["structured_response"]
-                    if response_format == PlacesNearby:
-                        # Prepare a list of dicts for each shop with info and image
-                        shops = []
-                        for i in range(len(data.names)):
-                            info = (
-                                f"**{i+1}. {data.names[i]}**\n"
-                                f"   - Address: {data.addresses[i]}\n"
-                                f"   - Rating: {data.ratings[i]}\n"
-                                f"   - Google Maps: [Navigate to Place]({data.google_map_links[i]})"
-                            )
-                            photo_url = cached_photo(data.photos[i]) if i < len(data.photos) else None
-                            shops.append({"info": info, "photo_url": photo_url})
-                        st.session_state["ai_responses"].append(shops)
-                        st.session_state["new_ai_responses"].append(shops)
-                        st.session_state["chat_history"].append(AIMessage(content=shops))
-                    elif response_format == SearchResult:
-                        # Render each result as a separate markdown block for consistency
-                        results = []
-                        for item in data.results:
-                            text = item.text.strip()
-                            source = item.source.strip()
-                            info = f"{text}  {source}"
-                            results.append({"info": info, "photo_url": None})
-                        st.session_state["ai_responses"].append(results)
-                        st.session_state["new_ai_responses"].append(results)
-                        st.session_state["chat_history"].append(AIMessage(content=results))
+                    shops = []
+                    for i in range(len(data.names)):
+                        info = (
+                            f"**{i+1}. {data.names[i]}**\n"
+                            f"   - Address: {data.addresses[i]}\n"
+                            f"   - Rating: {data.ratings[i]}\n"
+                            f"   - Google Maps: [Navigate to Place]({data.google_map_links[i]})"
+                        )
+                        photo_url = cached_photo(data.photos[i]) if i < len(data.photos) else None
+                        shops.append({"info": info, "photo_url": photo_url})
+                    st.session_state["ai_responses"].append(shops)
+                    st.session_state["new_ai_responses"].append(shops)
+                    st.session_state["chat_history"].append(AIMessage(content=shops))
+                elif response_format == SearchResult:
+                    # Render each result as a separate markdown block for consistency
+                    data = res["structured_response"]
+                    results = []
+                    for item in data.results:
+                        text = item.text.strip()
+                        source = item.source.strip()
+                        info = f"{text}  {source}"
+                        results.append({"info": info, "photo_url": None})
+                    st.session_state["ai_responses"].append(results)
+                    st.session_state["new_ai_responses"].append(results)
+                    st.session_state["chat_history"].append(AIMessage(content=results))
                 else:
-                    res = llm.invoke(rephrased_question)
-                    st.session_state["ai_responses"].append([{"info": res.text, "photo_url": None}])
-                    st.session_state["new_ai_responses"].append([{"info": res.text, "photo_url": None}])
-                    st.session_state["chat_history"].append(AIMessage(content=res.text))
+                    st.session_state["ai_responses"].append([{"info": res["messages"][-1].text, "photo_url": None}])
+                    st.session_state["new_ai_responses"].append([{"info": res["messages"][-1].text, "photo_url": None}])
+                    st.session_state["chat_history"].append(AIMessage(content=res["messages"][-1].text))
 
     if st.session_state["user_prompts"]:
         with st.container(gap="small"):
