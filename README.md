@@ -179,11 +179,3 @@ Informational page with project details and developer information
 ## Author
 
 Developed by [Kenneth Matthew](https://www.linkedin.com/in/kennethmatthew/)
-
-## License
-
-[Add your license information here]
-
-## Support
-
-For issues, questions, or contributions, please open an issue or submit a pull request.
