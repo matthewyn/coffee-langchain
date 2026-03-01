@@ -15,13 +15,11 @@ def find_places_by_text(query: str, lat: float = None, lng: float = None, radius
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.googleMapsLinks,places.photos",
     }
 
-    # Always include the query
     payload = {
         "textQuery": query,
         "pageSize": 5,
     }
 
-    # Only apply location bias if coordinates are provided
     if lat is not None and lng is not None:
         payload["locationBias"] = {
             "circle": {

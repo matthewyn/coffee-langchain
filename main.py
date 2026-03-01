@@ -28,7 +28,6 @@ if "user_lat" not in st.session_state or "user_lng" not in st.session_state:
 
 tools = [find_places_by_text, geocode_place, TavilySearch(), get_place_detail]
 
-# Store LLM and prompt templates in session state for single initialization
 if "llm" not in st.session_state:
     st.session_state["llm"] = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
